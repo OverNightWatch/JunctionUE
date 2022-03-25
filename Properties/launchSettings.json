@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "JunctionProjectTools": {
+      "commandName": "Project",
+      "commandLineArgs": "D:\\UECode\\UnrealEngine\\Engine\\Plugins D:\\Test\\Plugins \"D:\\Tools\\junction64.exe\""
+    }
+  }
+}
