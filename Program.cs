@@ -6,17 +6,55 @@ namespace Tools // Note: actual namespace depends on the project name.
 {
     internal class Program
     {
-        private const string PLUGINS_DIRECTORY_NAME = "Plugins";
-
         private static string _rootPath = null;
         private static string _targetPath = null;
         private static string _junctionPath = null;
 
         private static Process _junctionProcess = new Process();
 
-        private static List<string> _exclusiveDirectoryName = new List<string> { "Binaries", "DerivedDataCache", "Intermediate", "Saved", "Build" };
+        private static List<string> _exclusiveDirectoryName = new List<string> 
+        { "Binaries", "DerivedDataCache", "Intermediate", "Saved", "Build" };
 
-        private static List<DirectoryInfo> _paths = new List<DirectoryInfo>();
+        private static List<string> _firstCreateDirs = new List<string>
+        {
+            @"Engine",
+            @"Engine\Plugins",
+            @"Project",
+            @"Project\Plugins"
+        };
+
+        private static List<string> _ignoredJunctionDirs = new List<string>
+        {
+            @".idea",
+            @".vs",
+            @"Binaries",
+
+            @"Engine",
+            @"Engine\Binaries",
+            //@"Engine\Build",
+            @"Engine\DerivedDataCache",
+            @"Engine\Intermediate",
+            @"Engine\Plugins",
+            @"Engine\Saved",
+
+            @"Project",
+            @"Project\.idea",
+            @"Project\.vs",
+            @"Project\Binaries",
+            @"Project\Build",
+            @"Project\DerivedDataCache",
+            @"Project\Intermediate",
+            @"Project\Plugins",
+            @"Project\Saved",
+        };
+
+        private static List<string> _extraCopyDirs = new List<string>
+        {
+            @"Engine\Plugins\Media\AjaMedia\Binaries\ThirdParty",
+            @"Engine\Plugins\Media\BlackmagicMedia\Binaries\ThirdParty",
+        };
+
+        //private static List<DirectoryInfo> _paths = new List<DirectoryInfo>();
 
         private static void ProcessPluginsDirectory(string path)
         {
@@ -27,12 +65,8 @@ namespace Tools // Note: actual namespace depends on the project name.
             if (!dirInfo.Exists)
                 return;
 
-            if (dirInfo.Name != PLUGINS_DIRECTORY_NAME)
-                return;
-
             HashSet<DirectoryInfo> allPluginSet = new HashSet<DirectoryInfo>();
             HashSet<string> needJunctionPaths = new HashSet<string>();
-            HashSet<string> needCopyPaths = new HashSet<string>();
 
             //Plugins subdirectory
             foreach (DirectoryInfo pluginCategoryDir in dirInfo.GetDirectories())
@@ -46,11 +80,6 @@ namespace Tools // Note: actual namespace depends on the project name.
             foreach (DirectoryInfo pluginDir in allPluginSet)
             {
                 ProcessSinglePluginDirectory(pluginDir, needJunctionPaths);
-            }
-
-            foreach(string junctionPath in needJunctionPaths)
-            {
-                Console.WriteLine("Junction : " + junctionPath.Replace(_rootPath, _targetPath));
             }
         }
 
@@ -95,7 +124,7 @@ namespace Tools // Note: actual namespace depends on the project name.
             }
             else
             {
-                CreatePluginDirectoryRecursively(pluginDir.FullName.Replace(_rootPath, _targetPath));
+                CreateDirectoryRecursively(pluginDir.FullName.Replace(_rootPath, _targetPath));
             }
 
             foreach(DirectoryInfo subDir in pluginDir.GetDirectories())
@@ -125,7 +154,7 @@ namespace Tools // Note: actual namespace depends on the project name.
             return true;
         }
 
-        private static void CreatePluginDirectoryRecursively(string path)
+        private static void CreateDirectoryRecursively(string path)
         {
             if (Directory.Exists(path))
                 return;
@@ -141,26 +170,6 @@ namespace Tools // Note: actual namespace depends on the project name.
             foreach (string p in stack)
             {
                 Directory.CreateDirectory(p);
-            }
-        }
-
-        private static void GetAllContentByRoot(string path, int currentDepth)
-        {
-            if (string.IsNullOrEmpty(path) || currentDepth < 0)
-                return;
-
-            DirectoryInfo dirInfo = new DirectoryInfo(path);
-            if (!dirInfo.Exists)
-                return;
-
-            _paths.Add(dirInfo);
-
-            foreach (var dir in dirInfo.GetDirectories())
-            {
-                if (_exclusiveDirectoryName.Contains(dir.Name))
-                    continue;
-
-                GetAllContentByRoot(dir.FullName, currentDepth - 1);
             }
         }
 
@@ -181,18 +190,83 @@ namespace Tools // Note: actual namespace depends on the project name.
             _junctionProcess.StartInfo.RedirectStandardError = true;
             _junctionProcess.StartInfo.CreateNoWindow = true;
         }
+
+        private static void FullDirectoryCopy(string sourceDir, string targetDir)
+		{
+            if (!Directory.Exists(sourceDir))
+            {
+                Console.WriteLine($"Failed to copy dir : {sourceDir}");
+                return;
+            }
+
+            CreateDirectoryRecursively(targetDir);
+
+            foreach (string file in Directory.GetFiles(sourceDir))
+			{
+                File.Copy(file, file.Replace(sourceDir, targetDir), true);
+            }
+
+            foreach (string subDir in Directory.GetDirectories(sourceDir))
+			{
+                FullDirectoryCopy(subDir, subDir.Replace(sourceDir, targetDir));
+			}
+		}
          
         static void Main(string[] args)
         {
             _rootPath = args[0];
             _targetPath = args[1];
-
             _junctionPath = args[2];
 
             InitJunctionProcess();
 
-            _paths.Clear();
-            ProcessPluginsDirectory(_rootPath);
+            CreateDefaultFilesAndDirs();
+
+            JunctionDefaultDirs(_rootPath);
+            JunctionDefaultDirs($@"{_rootPath}\Engine");
+            JunctionDefaultDirs($@"{_rootPath}\Project");
+
+            ProcessPluginsDirectory($@"{_rootPath}\Engine\Plugins");
+            ProcessPluginsDirectory($@"{_rootPath}\Project\Plugins");
+
+            CopyExtraDirs();
         }
+
+        private static void CreateDefaultFilesAndDirs()
+		{
+            foreach (string dir in _firstCreateDirs)
+			{
+                Directory.CreateDirectory(@$"{_targetPath}\{dir}");
+			}
+
+            foreach (string file in Directory.GetFiles(_rootPath))
+			{
+                File.Copy(file, file.Replace(_rootPath, _targetPath), true);
+            }
+
+            foreach (string file in Directory.GetFiles($@"{_rootPath}\Project"))
+            {
+                File.Copy(file, file.Replace(_rootPath, _targetPath), true);
+            }
+        }
+
+        private static void JunctionDefaultDirs(string path)
+		{
+            foreach(string dir in Directory.GetDirectories(path))
+			{
+                if (_ignoredJunctionDirs.Contains(dir.Replace(_rootPath + @"\", "")))
+                    continue;
+
+                Junction(dir, dir.Replace(_rootPath, _targetPath));
+			}
+		}
+
+        private static void CopyExtraDirs()
+		{
+            foreach (string dir in _extraCopyDirs)
+			{
+                FullDirectoryCopy($@"{_rootPath}\{dir}", $@"{_targetPath}\{dir}");
+			}
+		}
     }
 }
