@@ -2,7 +2,7 @@
   "profiles": {
     "JunctionProjectTools": {
       "commandName": "Project",
-      "commandLineArgs": "D:\\P4WS\\CloudEngine F:\\CloudRender \"F:\\Junction\\junction64.exe\""
+      "commandLineArgs": "F:\\Junction\\junction64.exe D:\\P4WS\\CloudEngine F:\\Test"
     }
   }
 }
